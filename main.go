@@ -12,9 +12,9 @@ type Message struct {
 }
 
 type Node struct {
-	msg        Message
-	state      bool
-	leader_ack bool
+	msg               Message
+	state             bool
+	elected_leader_id int
 }
 
 /* **************************************************** Functions **************************************************** */
@@ -25,18 +25,18 @@ func randRange(min, max int) int {
 
 func SendElectedMessage(elected_leader Node, n int, elected_pos int, nodes []Node) {
 	i := elected_pos
-	starting_node := nodes[elected_pos]
+	starting_node := &nodes[elected_pos]
 	for i < 1000000 {
 		// Determine the next node in a circular manner
 		receiving_node := &nodes[(i+1)%n]
 
-		// Set all participating state to false
+		// Set all participating state to false and update each elected_leader_id field
 		if receiving_node.state {
 			receiving_node.state = false
-			receiving_node.leader_ack = true
+			receiving_node.elected_leader_id = elected_leader.msg.id
 		}
 
-		// Stop case: Elected position has been reached
+		// Stop case: Leader position has been reached
 		if receiving_node.msg.id == starting_node.msg.id {
 			return
 		}
@@ -48,8 +48,8 @@ func SendElectedMessage(elected_leader Node, n int, elected_pos int, nodes []Nod
 
 func StartElection(initiator int, nodes []Node, n int, attrx int, receiving_node Node) Node {
 	i := initiator
-	elected_node := &nodes[i]
-	elected_node.leader_ack = true // leader of course acknowledges itself as leader
+	initiator_node := &nodes[i]
+	initiator_node.elected_leader_id = initiator_node.msg.id // initiating node sets itself to participating
 	for i < 1000000 {
 		// Determine the next node in a circular manner
 		receiving_node := nodes[(i+1)%n]
@@ -58,6 +58,7 @@ func StartElection(initiator int, nodes []Node, n int, attrx int, receiving_node
 		if receiving_node.msg.attrj == attrx {
 			elected_leader := receiving_node
 			elected_pos := i
+			elected_leader.elected_leader_id = elected_leader.msg.id
 			SendElectedMessage(elected_leader, n, elected_pos, nodes)
 			return receiving_node
 		}
@@ -103,8 +104,8 @@ func main() {
 				id:    i + 1,
 				attrj: randRange(0, 100),
 			},
-			state:      false,
-			leader_ack: false,
+			state:             false,
+			elected_leader_id: 0,
 		}
 		nodes = append(nodes, node)
 	}
@@ -130,7 +131,7 @@ func main() {
 
 	fmt.Println("Did all node acknowledge new leader?\n")
 	for i := range n {
-		fmt.Printf("Node %d (leader_ack: %t)\n", nodes[i].msg.id, nodes[i].leader_ack)
+		fmt.Printf("Node %d (leader_ack: %d)\n", nodes[i].msg.id, nodes[i].elected_leader_id)
 	}
 	fmt.Println()
 
