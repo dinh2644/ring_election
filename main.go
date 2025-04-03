@@ -7,8 +7,8 @@ import (
 
 /* **************************************************** Classes (& Methods) **************************************************** */
 type Message struct {
-	id   int
-	attr int
+	id    int
+	attrj int
 }
 
 type Node struct {
@@ -28,17 +28,16 @@ func SendElectedMessage(elected_leader Node, n int, elected_pos int, nodes []Nod
 	starting_node := nodes[elected_pos]
 	for i < 1000000 {
 		// Determine the next node in a circular manner
-		successor_node := &nodes[(i+1)%n]
+		receiving_node := &nodes[(i+1)%n]
 
 		// Set all participating state to false
-		if successor_node.state {
-			successor_node.state = false
-			successor_node.leader_ack = true
+		if receiving_node.state {
+			receiving_node.state = false
+			receiving_node.leader_ack = true
 		}
 
 		// Stop case: Elected position has been reached
-		if successor_node.msg.id == starting_node.msg.id {
-			fmt.Println("STOPPED")
+		if receiving_node.msg.id == starting_node.msg.id {
 			return
 		}
 
@@ -47,37 +46,43 @@ func SendElectedMessage(elected_leader Node, n int, elected_pos int, nodes []Nod
 	}
 }
 
-func StartElection(initiator int, nodes []Node, n int, max_id int, successor_node Node) Node {
+func StartElection(initiator int, nodes []Node, n int, attrx int, receiving_node Node) Node {
 	i := initiator
 	elected_node := &nodes[i]
 	elected_node.leader_ack = true // leader of course acknowledges itself as leader
 	for i < 1000000 {
 		// Determine the next node in a circular manner
-		successor_node := nodes[(i+1)%n]
-
-		// FOR DEBUGGING:
-		//fmt.Printf("successor_node id: %d\n", successor_node.msg.id)
-
-		/* Handle passing/receiving message */
+		receiving_node := nodes[(i+1)%n]
 
 		// Stop case: traveled the whole ring, so Pi declares itself the leader
-		if successor_node.msg.attr == max_id {
-			elected_leader := successor_node
+		if receiving_node.msg.attrj == attrx {
+			elected_leader := receiving_node
 			elected_pos := i
 			SendElectedMessage(elected_leader, n, elected_pos, nodes)
-			return successor_node
+			return receiving_node
 		}
-		// Case 1: If the received <attribute, ID> is less than its own:
-		if successor_node.msg.attr > max_id {
-			max_id = successor_node.msg.attr
+
+		// Case 1: If the received <attribute, ID> is greater than its own
+		if attrx > receiving_node.msg.attrj {
+			// forward message (election, <attrx, x>) to successor (no updating)
+
 			// set state to participating
 			nodes[(i+1)%n].state = true
 		}
-		// Case 2: If the received <attribute, ID> is greater than its own
-		if successor_node.msg.attr < max_id {
-			// set state to participating
-			nodes[(i+1)%n].state = true
+
+		// Case 2: If the received <attribute, ID> is less than its own:
+		if attrx < receiving_node.msg.attrj {
+			if !receiving_node.state {
+				// send (election, <attrj, j>) to successor
+				attrx = receiving_node.msg.attrj
+				// set state to participating
+				nodes[(i+1)%n].state = true
+			}
+
 		}
+
+		// Track nodes visited
+		fmt.Printf("Processed node %d (attr: %d)\n", receiving_node.msg.id, receiving_node.msg.attrj)
 
 		// Move to next node in ring
 		i = (i + 1) % n
@@ -95,8 +100,8 @@ func main() {
 	for i := range n {
 		node := Node{
 			msg: Message{
-				id:   i + 1,
-				attr: randRange(0, 100),
+				id:    i + 1,
+				attrj: randRange(0, 100),
 			},
 			state:      false,
 			leader_ack: false,
@@ -104,35 +109,29 @@ func main() {
 		nodes = append(nodes, node)
 	}
 
-	// This test case failed
-	// Node 1 (attr: 24)
-	// Node 2 (attr: 80)
-	// Node 3 (attr: 61)
-	// Node 4 (attr: 35)
-	// Node 5 (attr: 54)
-
 	// Randomly select P(i)
 	initiator := randRange(1, n)
 
-	max_id := nodes[initiator].msg.attr
-	successor_node := nodes[(initiator+1)%n]
-
-	// FOR DEBUGGING:
-	for i := range n {
-		fmt.Printf("Node %d (attr: %d)\n", i+1, nodes[i].msg.attr)
-	}
-	start_node := nodes[initiator]
+	attrx := nodes[initiator].msg.attrj
+	receiving_node := nodes[(initiator+1)%n]
 
 	// Start election
-	leader_node := StartElection(initiator, nodes, n, max_id, successor_node)
-
-	// FOR DEBUGGING:
-	fmt.Printf("Start node: %d\n", start_node.msg.id)
-	fmt.Printf("Leader node thread id: %d\n", leader_node.msg.attr)
-
-	// SEE IF ALL NODES ACKNOWLEDGED NEW LEADER
+	fmt.Printf("\nStart Election:\n")
 	for i := range n {
-		fmt.Printf("Node %d (leader_ack = %t)\n", nodes[i].msg.id, nodes[i].leader_ack)
+		fmt.Printf("Node %d (attr: %d)\n", nodes[i].msg.id, nodes[i].msg.attrj)
 	}
+
+	start_node := nodes[initiator]
+	fmt.Printf("\nStart node: %d\n\n", start_node.msg.id)
+
+	leader_node := StartElection(initiator, nodes, n, attrx, receiving_node)
+
+	fmt.Printf("\nLeader elected: Node %d (attr: %d)\n\n", leader_node.msg.id, nodes[leader_node.msg.id-1].msg.attrj)
+
+	fmt.Println("Did all node acknowledge new leader?\n")
+	for i := range n {
+		fmt.Printf("Node %d (leader_ack: %t)\n", nodes[i].msg.id, nodes[i].leader_ack)
+	}
+	fmt.Println()
 
 }
